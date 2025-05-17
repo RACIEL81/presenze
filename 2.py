@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 from sqlalchemy import create_engine
 import dash
@@ -6,16 +7,17 @@ from dash import dcc, html
 import plotly.graph_objects as go
 from dash.dependencies import Input, Output
 
-# Conexión a MySQL
-DB_USER = "root"
-DB_PASSWORD = "123456"
-DB_HOST = "localhost"
-DB_NAME = "presenze"
+# Obtener la URL de conexión desde variables de entorno
+DATABASE_URL = os.getenv("DATABASE_URL")
 
+if not DATABASE_URL:
+    raise ValueError("No se encontró la variable de entorno DATABASE_URL.")
+
+# Función para cargar los datos
 def cargar_datos():
     try:
-        engine = create_engine(f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}")
-        df = pd.read_sql_query("SELECT * FROM `presenze-1`", engine)  # ← Ajustado aquí
+        engine = create_engine(DATABASE_URL)
+        df = pd.read_sql("SELECT * FROM `presenze-1`", engine)
         df.columns = df.columns.str.lower().str.strip()
         return df
     except Exception as err:
@@ -26,19 +28,20 @@ df = cargar_datos()
 if df is None:
     raise ValueError("No se pudieron cargar los datos desde MySQL.")
 
+# Validar columnas necesarias
 columnas_necesarias = {'analisis', 'total_po', 'ciudad', 'aliado', 'región'}
-if not columnas_necesarias.issubset(set(df.columns)):
-    raise ValueError(f"Faltan columnas necesarias en la base de datos. Columnas disponibles: {df.columns}")
+if not columnas_necesarias.issubset(df.columns):
+    raise ValueError(f"Faltan columnas necesarias. Columnas disponibles: {df.columns.tolist()}")
 
 df['porcentaje'] = (df['analisis'].sum() / df['total_po'].sum()) * 100
 
 # Inicializar app Dash
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.SOLAR])
 
-# Diseño de la app
+# Layout visual
 app.layout = dbc.Container([
     dbc.Row([
-        dbc.Col(html.Img(src="assets/claro_logo.png", height="60px"), width=12, className="text-center mb-3")
+        dbc.Col(html.Img(src="assets/claro_logo.png", height="60px"), className="text-center mb-3")
     ]),
     dbc.Row([
         dbc.Col(dbc.Card(dbc.CardBody([
@@ -65,8 +68,8 @@ app.layout = dbc.Container([
             dcc.Dropdown(id='filtro-region', multi=True, placeholder="Seleccione una región")
         ]), className="shadow-sm bg-dark rounded"), width=3),
         dbc.Col([
-            dbc.Row([dbc.Col(dcc.Graph(id='grafico-barras'), width=12)], className="mb-3"),
-            dbc.Row([dbc.Col(dcc.Graph(id='grafico-lineas'), width=12)])
+            dbc.Row([dbc.Col(dcc.Graph(id='grafico-barras'))], className="mb-3"),
+            dbc.Row([dbc.Col(dcc.Graph(id='grafico-lineas'))])
         ], width=9)
     ], className="mb-3"),
     dbc.Row([
